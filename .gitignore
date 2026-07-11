@@ -44,3 +44,18 @@ Thumbs.db
 .claude/settings.local.json
 
 test-output
+
+
+# Environment files — NEVER commit these
+.env
+.env.development
+.env.production
+.env.test
+.env.local
+
+# Keep only the example template in git
+# (you'll create this next)
+!.env.example
+
+# Log files — never commit these
+logs/*.log
