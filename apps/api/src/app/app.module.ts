@@ -23,7 +23,13 @@ import { NotificationQueueModule } from './queue/notification-queue.module';
       envFilePath: ['.env.development', '.env'],
     }),
     LoggerModule.register({ serviceName: 'api' }),
+
+    // NotificationQueueModule must come BEFORE IopCommonUtilitiesModule
+    // so QUEUE_SERVICE_TOKEN is registered before AuthService needs it
+    NotificationQueueModule,
+
     IopCommonUtilitiesModule,
+
     BullModule.forRootAsync({
       useFactory: () => ({
         connection: {
@@ -32,11 +38,11 @@ import { NotificationQueueModule } from './queue/notification-queue.module';
         },
       }),
     }),
+
     BullBoardModule.forRoot({
       route: '/admin/queues',
       adapter: ExpressAdapter,
     }),
-    NotificationQueueModule,
   ],
   controllers: [
     AppController,

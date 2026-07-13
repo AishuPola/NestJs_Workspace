@@ -77,3 +77,6 @@ export type { IopEvent, BaseEvent } from './lib/pub-sub/pub-sub-response.dto';
 export { FeatureFlagModule } from './lib/feature-flag/feature-flag.module';
 export { FeatureFlagService } from './lib/feature-flag/feature-flag.service';
 export type { FeatureFlag } from './lib/feature-flag/feature-flag.service';
+export { QUEUE_SERVICE_TOKEN } from './lib/auth/auth.service';
+
+export type { IQueueService } from './lib/auth/auth.service';

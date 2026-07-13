@@ -1,153 +1,3 @@
-// // libs/iop-common-utilities/src/lib/auth/auth.service.ts
-// // Add HttpService injection and notification call
-
-// import {
-//   Injectable,
-//   UnauthorizedException,
-//   ConflictException,
-//   NotFoundException,
-// } from '@nestjs/common';
-// import { JwtService } from '@nestjs/jwt';
-// import { HttpService } from '@nestjs/axios';
-// import * as bcrypt from 'bcryptjs';
-// import { UserRole } from './auth.enum';
-// import { UserRepository } from './user.repository';
-// import { User } from './user.entity';
-// import { LoggerService } from '../logger/logger.service';
-// import { TRACE_ID_HEADER } from '../logger/trace-id.middleware';
-// import { firstValueFrom } from 'rxjs';
-
-// export type SafeUser = Omit<User, 'passwordHash'>;
-
-// @Injectable()
-// export class AuthService {
-//   constructor(
-//     private readonly jwtService: JwtService,
-//     private readonly userRepository: UserRepository,
-//     private readonly loggerService: LoggerService,
-//     private readonly httpService: HttpService,
-//     // ↑ NEW — used to call notification-service
-//   ) {}
-
-//   async register(
-//     username: string,
-//     email: string,
-//     password: string,
-//     role: UserRole = UserRole.USER,
-//     traceId?: string, // ← NEW parameter
-//   ): Promise<SafeUser> {
-//     this.loggerService.info(
-//       'Registering new user',
-//       { username, email, role },
-//       traceId,
-//     );
-
-//     const emailExists = await this.userRepository.findByEmail(email);
-//     if (emailExists) {
-//       throw new ConflictException(`Email '${email}' is already registered`);
-//     }
-
-//     const usernameExists = await this.userRepository.findByUsername(username);
-//     if (usernameExists) {
-//       throw new ConflictException(`Username '${username}' is already taken`);
-//     }
-
-//     const passwordHash = await bcrypt.hash(password, 10);
-
-//     const newUser = await this.userRepository.create({
-//       username,
-//       email,
-//       passwordHash,
-//       role,
-//     });
-
-//     this.loggerService.info(
-//       'User registered successfully',
-//       { userId: newUser.id, username },
-//       traceId,
-//     );
-
-//     // ── Call notification service — forwarding the traceId ──
-//     // Fire-and-forget with catch — if notification fails,
-//     // registration still succeeds (user is already saved)
-//     this.callNotificationService(newUser.id, email, traceId).catch((err) => {
-//       this.loggerService.warn(
-//         'Failed to call notification service',
-//         { error: err.message },
-//         traceId,
-//       );
-//     });
-
-//     const { passwordHash: _, ...safeUser } = newUser;
-//     return safeUser;
-//   }
-
-//   // callNotificationService
-//   // Calls notification-service with X-Trace-Id forwarded
-//   // so both services' logs share the same traceId
-//   private async callNotificationService(
-//     userId: number,
-//     email: string,
-//     traceId?: string,
-//   ): Promise<void> {
-//     await firstValueFrom(
-//       this.httpService.post(
-//         'http://localhost:3001/notify',
-//         {
-//           type: 'WELCOME',
-//           userId,
-//           email,
-//         },
-//         {
-//           headers: {
-//             // This is the critical line — forwarding the traceId
-//             // so notification-service logs show the same ID
-//             [TRACE_ID_HEADER]: traceId || '',
-//           },
-//         },
-//       ),
-//     );
-//   }
-
-//   async login(email: string, password: string, traceId?: string) {
-//     this.loggerService.info('Login attempt', { email }, traceId);
-
-//     const user = await this.userRepository.findByEmail(email);
-//     if (!user) throw new UnauthorizedException('Invalid credentials');
-
-//     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-//     if (!isPasswordValid)
-//       throw new UnauthorizedException('Invalid credentials');
-
-//     const payload = {
-//       sub: user.id,
-//       username: user.username,
-//       email: user.email,
-//       role: user.role,
-//     };
-//     const { passwordHash: _, ...safeUser } = user;
-
-//     this.loggerService.info('Login successful', { userId: user.id }, traceId);
-
-//     return { access_token: this.jwtService.sign(payload), user: safeUser };
-//   }
-
-//   async findById(id: number): Promise<User | null> {
-//     return this.userRepository.findById(id);
-//   }
-
-//   async findAll(): Promise<SafeUser[]> {
-//     const users = await this.userRepository.findAll();
-//     return users.map(({ passwordHash: _, ...safe }) => safe);
-//   }
-
-//   async getProfile(userId: number): Promise<SafeUser> {
-//     const user = await this.findById(userId);
-//     if (!user) throw new NotFoundException('User not found');
-//     const { passwordHash: _, ...safe } = user;
-//     return safe;
-//   }
-// }
 // libs/iop-common-utilities/src/lib/auth/auth.service.ts
 
 import {
@@ -155,6 +5,8 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  Inject,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -170,12 +22,20 @@ import {
   UserLoggedInEvent,
 } from '../pub-sub/pub-sub-response.dto';
 
-// Week 4 HTTP import — commented out, replaced by pub/sub
-// import { HttpService } from '@nestjs/axios';
-// import { firstValueFrom } from 'rxjs';
-// import { TRACE_ID_HEADER } from '../logger/trace-id.middleware';
-
 export type SafeUser = Omit<User, 'passwordHash'>;
+
+// Injection token for the queue service
+// Optional because notification-service doesn't have BullMQ
+export const QUEUE_SERVICE_TOKEN = 'QUEUE_SERVICE_TOKEN';
+
+export interface IQueueService {
+  addWelcomeJob(data: {
+    userId: number;
+    email: string;
+    username: string;
+    traceId: string;
+  }): Promise<void>;
+}
 
 @Injectable()
 export class AuthService {
@@ -184,9 +44,12 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly loggerService: LoggerService,
     private readonly pubSubPublisher: PubSubPublisherService,
-    // ↑ Week 5 — replaces HttpService
     private readonly featureFlag: FeatureFlagService,
-    // ↑ Week 5 — controls whether pub/sub runs
+    @Optional()
+    @Inject(QUEUE_SERVICE_TOKEN)
+    private readonly queueService: IQueueService | null,
+    // ↑ Optional — notification-service doesn't inject this
+    // Only the API service provides it via NotificationQueueModule
   ) {}
 
   async register(
@@ -203,12 +66,14 @@ export class AuthService {
     );
 
     const emailExists = await this.userRepository.findByEmail(email);
-    if (emailExists)
+    if (emailExists) {
       throw new ConflictException(`Email '${email}' is already registered`);
+    }
 
     const usernameExists = await this.userRepository.findByUsername(username);
-    if (usernameExists)
+    if (usernameExists) {
       throw new ConflictException(`Username '${username}' is already taken`);
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -224,21 +89,14 @@ export class AuthService {
       { userId: newUser.id, username },
       traceId,
     );
-    console.log(
-      'FEATURE FLAG enablePubSub:',
-      this.featureFlag.isEnabled('pubsub'),
+
+    // ── Week 5: Publish RabbitMQ event ─────────────────────────
+    this.loggerService.debug(
+      '[AuthService] enablePubSub check',
+      { pubsubEnabled: this.featureFlag.isEnabled('pubsub') },
+      traceId,
     );
 
-    console.log(
-      '[AuthService] About to check pubsub flag:',
-      this.featureFlag.isEnabled('pubsub'),
-    );
-    // console.log('APP CONFIG enablePubSub:', this.appConfig);
-
-    // ── Week 5: Publish event via RabbitMQ ────────────────────
-    // Feature flag guards the publish call — if ENABLE_PUBSUB=false
-    // this block is skipped entirely, registration still works.
-    // Week 4 direct HTTP call is commented below for reference.
     if (this.featureFlag.isEnabled('pubsub')) {
       const event: UserRegisteredEvent = {
         type: EventName.USER_REGISTERED,
@@ -249,10 +107,7 @@ export class AuthService {
         traceId: traceId || '',
         timestamp: new Date().toISOString(),
       };
-
-      console.log('[AuthService] Publishing event:', event.type);
-      // Fire-and-forget — if RabbitMQ is down, registration
-      // still succeeds. The warning is logged but no error thrown.
+      // this pubSubPublisher.publish(event) is called.
       this.pubSubPublisher.publish(event).catch((err) => {
         this.loggerService.warn(
           'Failed to publish user.registered event',
@@ -262,10 +117,41 @@ export class AuthService {
       });
     }
 
-    // Week 4 direct HTTP call — replaced by pub/sub above
-    // this.callNotificationService(newUser.id, email, traceId).catch(...)
+    // ── Week 5: Add BullMQ background job ──────────────────────
+    this.loggerService.debug(
+      '[AuthService] enableBullMq check',
+      {
+        bullmqEnabled: this.featureFlag.isEnabled('bullmq'),
+        hasQueueService: !!this.queueService,
+      },
+      traceId,
+    );
 
-    const { passwordHash: _, ...safeUser } = newUser;
+    if (this.featureFlag.isEnabled('bullmq') && this.queueService) {
+      this.queueService
+        .addWelcomeJob({
+          userId: newUser.id,
+          email: newUser.email,
+          username: newUser.username,
+          traceId: traceId || '',
+        })
+        .catch((err) => {
+          this.loggerService.warn(
+            'Failed to add welcome job to queue',
+            { error: err.message },
+            traceId,
+          );
+        });
+    }
+
+    void newUser.passwordHash; // Exclude from SafeUser type
+    const safeUser: SafeUser = {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email,
+      role: newUser.role,
+      createdAt: newUser.createdAt,
+    };
     return safeUser;
   }
 
@@ -292,7 +178,6 @@ export class AuthService {
 
     this.loggerService.info('Login successful', { userId: user.id }, traceId);
 
-    // Publish login event if pub/sub is enabled
     if (this.featureFlag.isEnabled('pubsub')) {
       const event: UserLoggedInEvent = {
         type: EventName.USER_LOGGED_IN,
@@ -301,17 +186,23 @@ export class AuthService {
         traceId: traceId || '',
         timestamp: new Date().toISOString(),
       };
-      console.log('[AuthService] Publishing event:', event.type);
-      this.pubSubPublisher.publish(event).catch((error) => {
+      this.pubSubPublisher.publish(event).catch((err) => {
         this.loggerService.warn(
-          'Failed to publish login event',
-          { error },
+          'Failed to publish user.logged-in event',
+          { error: err.message },
           traceId,
         );
       });
     }
 
-    const { passwordHash: _, ...safeUser } = user;
+    void user.passwordHash; // Exclude from SafeUser type
+    const safeUser: SafeUser = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
     return { access_token: this.jwtService.sign(payload), user: safeUser };
   }
 
@@ -321,13 +212,26 @@ export class AuthService {
 
   async findAll(): Promise<SafeUser[]> {
     const users = await this.userRepository.findAll();
-    return users.map(({ passwordHash: _, ...safe }) => safe);
+    return users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    }));
   }
 
   async getProfile(userId: number): Promise<SafeUser> {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-    const { passwordHash: _, ...safe } = user;
+    void user.passwordHash; // Exclude from SafeUser type
+    const safe: SafeUser = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
     return safe;
   }
 }
