@@ -43,6 +43,9 @@ import { AppConfigModule } from '../config/config.module';
         // entities — tells TypeORM which classes map to tables
         // As you add more entities (Week 4+), add them to this array
         entities: [User],
+        autoLoadEntities: true,
+
+        
 
         // synchronize — automatically updates the database schema
         // to match your entity classes on every app restart

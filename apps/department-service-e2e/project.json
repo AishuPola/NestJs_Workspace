@@ -1,0 +1,17 @@
+{
+  "name": "department-service-e2e",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "implicitDependencies": ["department-service"],
+  "targets": {
+    "e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{e2eProjectRoot}"],
+      "options": {
+        "jestConfig": "department-service-e2e/jest.config.cts",
+        "passWithNoTests": true
+      },
+      "dependsOn": ["department-service:build", "department-service:serve"]
+    }
+  }
+}

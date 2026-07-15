@@ -56,7 +56,9 @@
       "exclude": [
         "apps/api-e2e/**/*",
         "apps-e2e/**/*",
-        "notification-service-e2e/**/*"
+        "notification-service-e2e/**/*",
+        "employee-service-e2e/**/*",
+        "department-service-e2e/**/*"
       ]
     }
   ],

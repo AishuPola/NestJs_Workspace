@@ -1,4 +1,4 @@
-export * from './lib/iop-common-utilities.js';
+export * from './lib/iop-common-utilities';
 // Public API of the shared library
 export { IopCommonUtilitiesModule } from './lib/iop-common-utilities.module.js';
 export { AuthModule } from './lib/auth/auth.module.js';
@@ -80,3 +80,10 @@ export type { FeatureFlag } from './lib/feature-flag/feature-flag.service';
 export { QUEUE_SERVICE_TOKEN } from './lib/auth/auth.service';
 
 export type { IQueueService } from './lib/auth/auth.service';
+// Add to libs/iop-common-utilities/src/index.ts
+
+export type {
+  EmployeeCreatedEvent,
+  EmployeeUpdatedEvent,
+  EmployeeDeletedEvent,
+} from './lib/pub-sub/pub-sub-response.dto';

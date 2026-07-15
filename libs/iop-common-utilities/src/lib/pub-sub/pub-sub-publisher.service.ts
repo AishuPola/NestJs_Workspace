@@ -57,6 +57,9 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
 
       await this.channel.bindQueue(NOTIFICATION_QUEUE_NAME, EXCHANGE_NAME, '');
 
+      // In onModuleInit() — after the existing notification.queue binding, add:
+      await this.channel.assertQueue('department.queue', { durable: true });
+      await this.channel.bindQueue('department.queue', EXCHANGE_NAME, '');
       this.isReady = true;
       console.log('[PubSubPublisher] ✓ Connected and ready');
 
